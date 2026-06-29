@@ -1,5 +1,4 @@
-// Lokal: leer = gleiche Origin (Express auf localhost:3000)
-// Netlify-Build: wird von scripts/generate-config.js überschrieben
+// Produktion: Backend auf Render. Netlify-Build überschreibt via generate-config.js + PUBLIC_API_URL
 window.CLEANQUEUE_CONFIG = {
-  API_URL: ''
+  API_URL: 'https://cleanqueue-bot.onrender.com'
 };
