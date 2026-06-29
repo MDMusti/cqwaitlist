@@ -1,13 +1,30 @@
+# Render Blueprint — CleanQueue Backend
+# Dashboard: New → Blueprint → Repo verbinden, ODER bestehenden Web Service damit syncen.
+# Secrets (Discord) im Dashboard setzen — nicht in dieser Datei.
+
 services:
   - type: web
     name: cleanqueue-bot
-    env: node
+    runtime: node
     plan: free
+    region: frankfurt
     buildCommand: npm install
     startCommand: npm start
+    healthCheckPath: /api/stats
+    autoDeploy: true
     envVars:
-      - key: PORT
-        value: "3000"
+      - key: NODE_VERSION
+        value: "20"
+      - key: CLIENT_ID
+        sync: false
+      - key: CLIENT_SECRET
+        sync: false
+      - key: BOT_TOKEN
+        sync: false
+      - key: GUILD_ID
+        sync: false
+      - key: NOTIFY_CHANNEL_ID
+        sync: false
       - key: FRONTEND_URL
         sync: false
       - key: REDIRECT_URI
