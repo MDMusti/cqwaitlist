@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CleanQueue — Tritt der Warteliste bei</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --purple: #7c5cfc;
+  --purple-light: #a78bfa;
+  --purple-dim: rgba(124,92,252,0.15);
+  --purple-glow: rgba(124,92,252,0.25);
+  --bg: #08080f;
+  --bg2: #0f0f1a;
+  --surface: rgba(255,255,255,0.04);
+  --surface-hover: rgba(255,255,255,0.07);
+  --border: rgba(255,255,255,0.08);
+  --border-hover: rgba(255,255,255,0.18);
+  --text: #ede9ff;
+  --text-muted: rgba(237,233,255,0.5);
+  --text-dim: rgba(237,233,255,0.28);
+  --discord: #5865F2;
+  --discord-hover: #4752C4;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+
+
+/* ── BACKGROUND GRID ── */
+.grid-bg {
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(124,92,252,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(124,92,252,0.04) 1px, transparent 1px);
+  background-size: 48px 48px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── GRADIENT ORBS ── */
+.orb {
+  position: fixed;
+  border-radius: 50%;
+  pointer-events: none;
+  filter: blur(80px);
+  z-index: 0;
+}
+.orb-1 {
+  width: 700px; height: 700px;
+  background: radial-gradient(circle, rgba(88,60,180,0.2) 0%, transparent 65%);
+  top: -300px; left: 50%; transform: translateX(-50%);
+  animation: orbFloat 8s ease-in-out infinite;
+}
+.orb-2 {
+  width: 400px; height: 400px;
+  background: radial-gradient(circle, rgba(124,92,252,0.12) 0%, transparent 65%);
+  bottom: 10%; right: -10%;
+  animation: orbFloat 11s ease-in-out infinite reverse;
+}
+
+@keyframes orbFloat {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50% { transform: translateX(-50%) translateY(-40px); }
+}
+.orb-2 { animation-name: orbFloat2; }
+@keyframes orbFloat2 {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-30px); }
+}
+
+/* ── NAV ── */
+nav {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.4rem 2.5rem;
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(12px);
+  background: rgba(8,8,15,0.6);
+}
+
+.nav-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 17px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.5px;
+  text-decoration: none;
+}
+
+.logo-icon {
+  width: 32px; height: 32px;
+  background: var(--purple);
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+}
+
+.nav-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 20px;
+  background: var(--purple-dim);
+  color: var(--purple-light);
+  border: 1px solid rgba(124,92,252,0.25);
+  letter-spacing: 0.3px;
+}
+
+.nav-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #4ade80;
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.8); }
+}
+
+/* ── HERO ── */
+.hero {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 6rem 2rem 4rem;
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: var(--purple-light);
+  margin-bottom: 1.5rem;
+  padding: 6px 14px;
+  background: var(--purple-dim);
+  border-radius: 20px;
+  border: 1px solid rgba(124,92,252,0.2);
+  opacity: 0;
+  animation: fadeUp 0.7s 0.1s ease forwards;
+}
+
+.hero h1 {
+  font-size: clamp(2.4rem, 6vw, 4.2rem);
+  font-weight: 900;
+  line-height: 1.05;
+  letter-spacing: -2px;
+  color: #fff;
+  max-width: 760px;
+  margin-bottom: 1.4rem;
+  opacity: 0;
+  animation: fadeUp 0.7s 0.2s ease forwards;
+}
+
+.hero h1 em {
+  font-style: normal;
+  background: linear-gradient(135deg, #a78bfa, #7c5cfc, #c4b5fd);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.hero p {
+  font-size: 17px;
+  line-height: 1.7;
+  color: var(--text-muted);
+  max-width: 500px;
+  margin-bottom: 2.5rem;
+  opacity: 0;
+  animation: fadeUp 0.7s 0.3s ease forwards;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── SLOT COUNTER ── */
+.slot-bar-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2.5rem;
+  opacity: 0;
+  animation: fadeUp 0.7s 0.4s ease forwards;
+}
+
+.slot-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.slot-count { font-weight: 700; color: var(--purple-light); font-size: 15px; }
+
+.slot-track {
+  width: 240px; height: 3px;
+  background: rgba(255,255,255,0.07);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.slot-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--purple), var(--purple-light));
+  border-radius: 3px;
+  width: 0%;
+  transition: width 1.4s cubic-bezier(.4,0,.2,1);
+}
+
+/* ── MAIN CARD ── */
+.card-wrap {
+  width: 100%;
+  max-width: 440px;
+  opacity: 0;
+  animation: fadeUp 0.7s 0.5s ease forwards;
+}
+
+.card {
+  background: rgba(255,255,255,0.035);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 2.2rem 2rem;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.3s;
+}
+
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--purple), transparent);
+  opacity: 0.6;
+}
+
+.card:hover { border-color: rgba(124,92,252,0.3); }
+
+/* Cover / shimmer effect on card */
+.card-shimmer {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(600px circle at var(--mx,50%) var(--my,50%), rgba(124,92,252,0.06), transparent 40%);
+  pointer-events: none;
+  transition: opacity 0.3s;
+  opacity: 0;
+  border-radius: 20px;
+}
+
+.card:hover .card-shimmer { opacity: 1; }
+
+.card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-align: center;
+  margin-bottom: 1.2rem;
+  letter-spacing: 0.2px;
+}
+
+/* Discord Button */
+.discord-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 15px 20px;
+  background: var(--discord);
+  border: none;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  letter-spacing: -0.2px;
+  position: relative;
+  overflow: hidden;
+  transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+  text-decoration: none;
+}
+
+.discord-btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.12) 0%, transparent 60%);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.discord-btn:hover { background: var(--discord-hover); box-shadow: 0 8px 32px rgba(88,101,242,0.35); transform: translateY(-1px); }
+.discord-btn:hover::after { opacity: 1; }
+.discord-btn:active { transform: scale(0.98) translateY(0); }
+
+/* Permissions box */
+.perms-box {
+  margin-top: 1rem;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+
+.perms-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+}
+
+.perm-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.perm-icon {
+  width: 22px; height: 22px;
+  border-radius: 6px;
+  background: var(--purple-dim);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.perm-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
+
+.privacy-note {
+  font-size: 11px;
+  color: var(--text-dim);
+  text-align: center;
+  margin-top: 14px;
+  line-height: 1.6;
+}
+
+/* ── SUCCESS STATE ── */
+.success-view {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  padding: 0.5rem 0;
+  text-align: center;
+}
+
+.success-ring {
+  width: 72px; height: 72px;
+  border-radius: 50%;
+  border: 2px solid var(--purple);
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 1.2rem;
+  position: relative;
+  animation: ringPop 0.5s cubic-bezier(.34,1.56,.64,1) forwards;
+}
+
+@keyframes ringPop {
+  from { transform: scale(0.3); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.success-check {
+  font-size: 28px;
+  color: var(--purple-light);
+}
+
+.success-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.5px;
+  margin-bottom: 0.5rem;
+}
+
+.success-pos-label {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 0.25rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-weight: 600;
+}
+
+.success-pos {
+  font-size: 52px;
+  font-weight: 900;
+  color: var(--purple);
+  letter-spacing: -2px;
+  line-height: 1;
+  margin-bottom: 1rem;
+  animation: countUp 0.6s 0.2s cubic-bezier(.34,1.56,.64,1) both;
+}
+
+@keyframes countUp {
+  from { transform: translateY(20px) scale(0.7); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+.success-sub {
+  font-size: 13.5px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  max-width: 280px;
+}
+
+.success-share {
+  margin-top: 1.4rem;
+  padding: 10px 20px;
+  background: transparent;
+  border: 1px solid var(--border-hover);
+  border-radius: 10px;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+
+.success-share:hover {
+  background: var(--purple-dim);
+  color: var(--purple-light);
+  border-color: rgba(124,92,252,0.4);
+}
+
+/* ── FEATURE GRID ── */
+.features {
+  position: relative;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  max-width: 680px;
+  width: 100%;
+  margin: 3.5rem auto 0;
+  padding: 0 2rem 5rem;
+  opacity: 0;
+  animation: fadeUp 0.7s 0.7s ease forwards;
+}
+
+.feat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1.2rem 1rem;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.3s, background 0.3s, transform 0.3s;
+}
+
+.feat:hover {
+  border-color: rgba(124,92,252,0.3);
+  background: var(--surface-hover);
+  transform: translateY(-3px);
+}
+
+.feat-shimmer {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(300px circle at var(--fx,50%) var(--fy,50%), rgba(124,92,252,0.07), transparent 50%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+
+.feat:hover .feat-shimmer { opacity: 1; }
+
+.feat-icon {
+  width: 40px; height: 40px;
+  border-radius: 10px;
+  background: var(--purple-dim);
+  border: 1px solid rgba(124,92,252,0.2);
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 12px;
+  color: var(--purple-light);
+}
+
+.feat-icon svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.feat-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 5px;
+  letter-spacing: -0.2px;
+}
+.feat-desc {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  line-height: 1.55;
+}
+
+/* ── FOOTER ── */
+footer {
+  position: relative;
+  z-index: 5;
+  text-align: center;
+  padding: 1.5rem 2rem 2.5rem;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+footer a { color: var(--purple-light); text-decoration: none; }
+footer a:hover { text-decoration: underline; }
+
+/* ── PARTICLES ── */
+.particles { position: fixed; inset: 0; pointer-events: none; z-index: 1; }
+.particle {
+  position: absolute;
+  width: 2px; height: 2px;
+  border-radius: 50%;
+  background: var(--purple);
+  opacity: 0;
+  animation: particleFloat linear infinite;
+}
+
+@keyframes particleFloat {
+  0% { transform: translateY(100vh) scale(0); opacity: 0; }
+  10% { opacity: 0.6; }
+  90% { opacity: 0.2; }
+  100% { transform: translateY(-20px) scale(1); opacity: 0; }
+}
+
+/* ── TOAST ── */
+.toast {
+  position: fixed;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%) translateY(80px);
+  background: rgba(124,92,252,0.15);
+  border: 1px solid rgba(124,92,252,0.3);
+  backdrop-filter: blur(16px);
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 500;
+  padding: 12px 20px;
+  border-radius: 12px;
+  z-index: 1000;
+  transition: transform 0.4s cubic-bezier(.34,1.56,.64,1), opacity 0.3s;
+  opacity: 0;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.toast.show {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+}
+
+@media (max-width: 600px) {
+  .features { grid-template-columns: 1fr; }
+  .hero h1 { letter-spacing: -1px; }
+  nav { padding: 1rem 1.25rem; }
+  .hero { padding: 4rem 1.25rem 3rem; }
+}
+</style>
+</head>
+<body>
+
+<div class="grid-bg"></div>
+<div class="orb orb-1"></div>
+<div class="orb orb-2"></div>
+
+<div class="particles" id="particles"></div>
+
+<div class="toast" id="toast"></div>
+
+<nav>
+  <a class="nav-logo" href="#">
+    <div class="logo-icon">⚡</div>
+    CleanQueue
+  </a>
+  <div class="nav-pill">
+    <div class="nav-dot"></div>
+    Bald verfügbar
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="eyebrow">🛡️ &nbsp;Waitlist offen</div>
+
+  <h1>Gaming ohne<br><em>Toxizität.</em></h1>
+
+  <p>CleanQueue ist der Discord-Server, auf dem Respekt keine Option ist — sondern die einzige Regel. Für alle Games. Für alle Spieler.</p>
+
+  <div class="slot-bar-wrap">
+    <div class="slot-info">
+      <span class="slot-count" id="slotsLeft">2.873</span>
+      <span>von 3.000 Beta-Plätzen frei</span>
+    </div>
+    <div class="slot-track">
+      <div class="slot-fill" id="slotFill"></div>
+    </div>
+  </div>
+
+  <div class="card-wrap">
+    <div class="card" id="mainCard">
+      <div class="card-shimmer" id="cardShimmer"></div>
+
+      <!-- FORM VIEW -->
+      <div id="formView">
+        <p class="card-title">Mit Discord verifizieren &amp; Platz sichern</p>
+
+        <a class="discord-btn" id="discordBtn" href="/auth/discord">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057c.002.022.015.043.031.056a19.9 19.9 0 0 0 5.993 3.03.077.077 0 0 0 .084-.028 13.99 13.99 0 0 0 1.226-1.994.074.074 0 0 0-.041-.104 13.12 13.12 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z"/>
+          </svg>
+          Mit Discord anmelden
+        </a>
+
+        <div class="perms-box">
+          <div class="perms-label">Wir fragen nur nach</div>
+          <div class="perm-row">
+            <div class="perm-icon">👤</div>
+            Dein Username &amp; Avatar
+          </div>
+          <div class="perm-sep"></div>
+          <div class="perm-row">
+            <div class="perm-icon">🔗</div>
+            Automatischer Server-Beitritt beim Launch
+          </div>
+        </div>
+
+        <p class="privacy-note">
+          Kein Passwort. Keine E-Mail. Deine Daten werden ausschließlich für den Server-Beitritt genutzt und nicht weitergegeben.
+        </p>
+      </div>
+
+      <!-- SUCCESS VIEW -->
+      <div class="success-view" id="successView">
+        <div class="success-ring">
+          <span class="success-check">✓</span>
+        </div>
+        <div class="success-title">Du bist dabei!</div>
+        <div class="success-pos-label">Dein Platz</div>
+        <div class="success-pos" id="posNum">#127</div>
+        <p class="success-sub">Wir fügen dich am Launch-Tag automatisch zu CleanQueue hinzu. Keep it clean. 🛡️</p>
+        <button class="success-share" onclick="handleShare()">Link teilen &amp; Freunde einladen</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="features" id="features">
+  <div class="feat" onmousemove="shimmerFeat(event, this)">
+    <div class="feat-shimmer"></div>
+    <div class="feat-icon">
+      <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+    </div>
+    <div class="feat-name">Zero-Toxicity</div>
+    <div class="feat-desc">Strikte Moderation. Sofort-Bann bei Beleidigungen, Sexismus und Trolling.</div>
+  </div>
+  <div class="feat" onmousemove="shimmerFeat(event, this)">
+    <div class="feat-shimmer"></div>
+    <div class="feat-icon">
+      <svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M12 12h.01M8 12h.01M16 12h.01M6 9v6M18 9v6"/></svg>
+    </div>
+    <div class="feat-name">Alle Games</div>
+    <div class="feat-desc">Valorant, CS2, Marvel Rivals, Deadlock — ein Server für alles.</div>
+  </div>
+  <div class="feat" onmousemove="shimmerFeat(event, this)">
+    <div class="feat-shimmer"></div>
+    <div class="feat-icon">
+      <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+    </div>
+    <div class="feat-name">Team in 2 min</div>
+    <div class="feat-desc">Strukturierte LFG-Channels. Sofort ein freundliches Team finden.</div>
+  </div>
+</div>
+
+<footer>
+  <p>© 2026 CleanQueue &nbsp;·&nbsp; <a href="#">Datenschutz</a> &nbsp;·&nbsp; <a href="#">Impressum</a></p>
+</footer>
+
+<script src="/config.js"></script>
+<script>
+// ── API-Basis: leer = localhost (Express), sonst Backend-URL (Netlify) ──
+const API_BASE = (window.CLEANQUEUE_CONFIG?.API_URL || '').replace(/\/$/, '');
+
+function apiUrl(path) {
+  return API_BASE + path;
+}
+
+document.getElementById('discordBtn').href = apiUrl('/auth/discord');
+
+// ── CARD SHIMMER ──
+const mainCard = document.getElementById('mainCard');
+const cardShimmer = document.getElementById('cardShimmer');
+mainCard.addEventListener('mousemove', e => {
+  const rect = mainCard.getBoundingClientRect();
+  const x = ((e.clientX - rect.left) / rect.width * 100).toFixed(1) + '%';
+  const y = ((e.clientY - rect.top) / rect.height * 100).toFixed(1) + '%';
+  cardShimmer.style.setProperty('--mx', x);
+  cardShimmer.style.setProperty('--my', y);
+});
+
+// ── FEAT SHIMMER ──
+function shimmerFeat(e, el) {
+  const rect = el.getBoundingClientRect();
+  const x = ((e.clientX - rect.left) / rect.width * 100).toFixed(1) + '%';
+  const y = ((e.clientY - rect.top) / rect.height * 100).toFixed(1) + '%';
+  el.style.setProperty('--fx', x);
+  el.style.setProperty('--fy', y);
+}
+
+// ── SLOT COUNTER — lädt echte Zahlen vom Backend ──
+let takenNow = 0;
+
+async function loadStats() {
+  try {
+    const res = await fetch(apiUrl('/api/stats'));
+    const data = await res.json();
+    takenNow = data.taken;
+  } catch (e) {
+    takenNow = 0; // Fallback wenn Backend noch nicht läuft
+  }
+  updateSlots();
+}
+
+function updateSlots(extra = 0) {
+  const taken = takenNow + extra;
+  const left = 3000 - taken;
+  document.getElementById('slotsLeft').textContent = left.toLocaleString('de-DE');
+  const pct = (taken / 3000 * 100).toFixed(2);
+  document.getElementById('slotFill').style.width = pct + '%';
+}
+
+// ── PARTICLES ──
+const pContainer = document.getElementById('particles');
+for (let i = 0; i < 18; i++) {
+  const p = document.createElement('div');
+  p.className = 'particle';
+  p.style.left = Math.random() * 100 + 'vw';
+  p.style.animationDuration = (12 + Math.random() * 18) + 's';
+  p.style.animationDelay = (Math.random() * 20) + 's';
+  p.style.width = p.style.height = (1 + Math.random() * 2) + 'px';
+  p.style.opacity = (0.2 + Math.random() * 0.5);
+  pContainer.appendChild(p);
+}
+
+// ── TOAST ──
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+// ── SUCCESS VIEW ──
+function showSuccessView(pos) {
+  document.getElementById('formView').style.display = 'none';
+  const sv = document.getElementById('successView');
+  sv.style.display = 'flex';
+  document.getElementById('posNum').textContent = '#' + pos;
+  launchConfetti();
+}
+
+// ── ON PAGE LOAD — check URL params from backend redirect ──
+window.addEventListener('DOMContentLoaded', async () => {
+  await loadStats();
+
+  const params = new URLSearchParams(window.location.search);
+
+  if (params.get('success') === 'true') {
+    const pos = params.get('pos') || '1';
+    const username = decodeURIComponent(params.get('username') || '');
+    history.replaceState({}, '', '/');
+    showSuccessView(pos);
+    showToast(`✅ Willkommen, ${username}! Du bist #${pos} auf der Liste.`);
+    return;
+  }
+
+  if (params.get('already') === 'true') {
+    const pos = params.get('pos') || '1';
+    history.replaceState({}, '', '/');
+    showSuccessView(pos);
+    showToast('ℹ️ Du bist bereits auf der Warteliste!');
+    return;
+  }
+
+  if (params.get('error') === 'full') {
+    history.replaceState({}, '', '/');
+    showToast('❌ Alle 3.000 Plätze sind leider vergeben!');
+    return;
+  }
+
+  if (params.get('error')) {
+    history.replaceState({}, '', '/');
+    showToast('⚠️ Etwas ist schiefgelaufen. Bitte versuche es erneut.');
+  }
+});
+
+// ── SHARE ──
+function handleShare() {
+  const url = 'https://cqwaitlist.com';
+  if (navigator.share) {
+    navigator.share({ title: 'CleanQueue', text: 'Toxizitätsfreies Gaming. Sicher dir einen Platz!', url });
+  } else {
+    navigator.clipboard.writeText(url).then(() => showToast('🔗 Link kopiert!'));
+  }
+}
+
+// ── CONFETTI ──
+function launchConfetti() {
+  const colors = ['#7c5cfc','#a78bfa','#c4b5fd','#fff','#5865F2'];
+  for (let i = 0; i < 60; i++) {
+    const el = document.createElement('div');
+    el.style.cssText = `
+      position:fixed; width:${4+Math.random()*5}px; height:${4+Math.random()*5}px;
+      background:${colors[Math.floor(Math.random()*colors.length)]};
+      border-radius:${Math.random()>0.5?'50%':'2px'};
+      left:${40+Math.random()*20}%; top:40%;
+      pointer-events:none; z-index:9999;
+      animation: confetti${i} ${0.8+Math.random()*1.2}s ease forwards;
+    `;
+    const tx = (Math.random()-0.5)*500;
+    const ty = -(100+Math.random()*300);
+    const rot = (Math.random()-0.5)*720;
+    const style = document.createElement('style');
+    style.textContent = `@keyframes confetti${i}{0%{transform:translate(0,0) rotate(0deg);opacity:1;}100%{transform:translate(${tx}px,${ty}px) rotate(${rot}deg);opacity:0;}}`;
+    document.head.appendChild(style);
+    document.body.appendChild(el);
+    setTimeout(() => { el.remove(); style.remove(); }, 2000);
+  }
+}
+</script>
+</body>
+</html>

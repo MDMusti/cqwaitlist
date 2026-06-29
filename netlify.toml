@@ -1,0 +1,9 @@
+# Netlify: nur das statische Frontend (public/)
+# API + OAuth laufen auf dem separaten Express-Backend (Render/Railway)
+
+[build]
+  publish = "public"
+  command = "node scripts/generate-config.js"
+
+# PUBLIC_API_URL muss in Netlify → Site settings → Environment variables gesetzt sein
+# Beispiel: https://cleanqueue-bot.onrender.com
