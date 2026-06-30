@@ -6,22 +6,23 @@ import {
   TextInputBuilder,
   TextInputStyle,
 } from 'discord.js';
-import { brandEmbed } from '../../lib/embeds';
+import { rulesEmbed, EMOJI } from '../../lib/ui';
 
 export function buildVerifyPanel() {
-  const embed = brandEmbed('🔐 Verifizierung — 18+')
+  const embed = rulesEmbed()
+    .setTitle(`${EMOJI.verify} Verifizierung — 18+`)
     .setDescription(
-      'Willkommen! Um Zugang zum Server zu erhalten, bestätige bitte:\n\n' +
-        '• Du bist **mindestens 18 Jahre alt**\n' +
-        '• Du akzeptierst die Server-Regeln\n' +
-        '• Dein Discord-Account erfüllt das Mindestalter\n\n' +
-        'Klicke auf **Verifizieren** und löse die kurze Aufgabe.',
+      'Willkommen! Um Zugang zum Server zu erhalten, durchlaufe die **3 Schritte**:\n\n' +
+        '**1.** Server-Regeln lesen\n' +
+        '**2.** Regeln akzeptieren\n' +
+        '**3.** Sicherheits-Captcha lösen\n\n' +
+        'Klicke auf **Verifizierung starten**.',
     );
 
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId('verify:start')
-      .setLabel('Verifizieren')
+      .setLabel('Verifizierung starten')
       .setStyle(ButtonStyle.Success)
       .setEmoji('✅'),
   );
@@ -29,10 +30,20 @@ export function buildVerifyPanel() {
   return { embeds: [embed], components: [row] };
 }
 
+export function buildRulesAcceptRow() {
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId('verify:rules')
+      .setLabel('Regeln akzeptieren')
+      .setStyle(ButtonStyle.Primary)
+      .setEmoji('📜'),
+  );
+}
+
 export function buildCaptchaModal(a: number, b: number): ModalBuilder {
   return new ModalBuilder()
     .setCustomId(`verify:captcha:${a}:${b}`)
-    .setTitle('Sicherheitsprüfung')
+    .setTitle('Schritt 3 — Sicherheitsprüfung')
     .addComponents(
       new ActionRowBuilder<TextInputBuilder>().addComponents(
         new TextInputBuilder()

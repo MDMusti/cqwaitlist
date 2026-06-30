@@ -48,6 +48,9 @@ export interface TicketRecord {
   channelId: string;
   userId: string;
   department: string;
+  subject?: string;
+  description?: string;
+  claimedBy?: string;
   status: string;
   createdAt: string;
   closedAt?: string;
@@ -62,6 +65,17 @@ export interface GuildConfigRecord {
   updatedAt: string;
 }
 
+interface TempVoiceRecord {
+  ownerId: string;
+  channelId: string;
+  panelChannelId?: string;
+  panelMessageId?: string;
+  trusted?: string[];
+  blocked?: string[];
+  userLimit?: number;
+  hidden?: boolean;
+}
+
 interface StoreData {
   guildConfigs: Record<string, GuildConfigRecord>;
   members: Record<string, MemberRecord>;
@@ -70,13 +84,43 @@ interface StoreData {
   tickets: TicketRecord[];
   caseCounters: Record<string, number>;
   captchas: Record<string, { answer: number; expiresAt: number }>;
-  tempVoice: Record<string, { ownerId: string; channelId: string }>;
+  tempVoice: Record<string, TempVoiceRecord>;
+  spamTracker: Record<string, { timestamps: number[] }>;
+  messageTracker: Record<string, { contents: { text: string; at: number }[] }>;
+  joinTracker: Record<string, { timestamps: number[] }>;
+  giveaways: Record<string, GiveawayRecord>;
+  verifyAccepted: Record<string, number>;
+}
+
+export interface GiveawayRecord {
+  id: string;
+  guildId: string;
+  channelId: string;
+  messageId: string;
+  prize: string;
+  hostId: string;
+  winnerCount: number;
+  endsAt: number;
+  entrants: string[];
 }
 
 const DEFAULT_SETTINGS: GuildModuleSettings = {
   channels: {},
   roles: {},
   verification: { minAccountAgeDays: 7 },
+  automod: {
+    blockInvites: true,
+    maxMentions: 5,
+    spamThreshold: 5,
+    spamWindowMs: 5000,
+    capsThreshold: 70,
+    capsMinLength: 12,
+    repeatedTextCount: 3,
+    repeatedTextWindowMs: 60_000,
+    quarantineOnViolation: false,
+  },
+  welcome: { leaveMessageEnabled: true },
+  antiRaid: { joinThreshold: 5, windowMs: 10_000 },
 };
 
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -96,6 +140,11 @@ function emptyStore(): StoreData {
     caseCounters: {},
     captchas: {},
     tempVoice: {},
+    spamTracker: {},
+    messageTracker: {},
+    joinTracker: {},
+    giveaways: {},
+    verifyAccepted: {},
   };
 }
 
@@ -161,6 +210,26 @@ class JsonStore {
           patch.config?.verification?.minAccountAgeDays ??
           existing?.config?.verification?.minAccountAgeDays ??
           DEFAULT_SETTINGS.verification!.minAccountAgeDays,
+      },
+      automod: {
+        ...DEFAULT_SETTINGS.automod,
+        ...existing?.config?.automod,
+        ...patch.config?.automod,
+      },
+      welcome: {
+        ...DEFAULT_SETTINGS.welcome,
+        ...existing?.config?.welcome,
+        ...patch.config?.welcome,
+      },
+      antiRaid: {
+        joinThreshold:
+          patch.config?.antiRaid?.joinThreshold ??
+          existing?.config?.antiRaid?.joinThreshold ??
+          DEFAULT_SETTINGS.antiRaid!.joinThreshold,
+        windowMs:
+          patch.config?.antiRaid?.windowMs ??
+          existing?.config?.antiRaid?.windowMs ??
+          DEFAULT_SETTINGS.antiRaid!.windowMs,
       },
     };
 
@@ -234,7 +303,13 @@ class JsonStore {
   }
 
   getCasesForUser(guildId: string, userId: string): CaseRecord[] {
-    return this.data.cases.filter((c) => c.guildId === guildId && c.targetId === userId);
+    return this.data.cases
+      .filter((c) => c.guildId === guildId && c.targetId === userId)
+      .sort((a, b) => b.caseNumber - a.caseNumber);
+  }
+
+  getNotesForUser(guildId: string, userId: string): CaseRecord[] {
+    return this.getCasesForUser(guildId, userId).filter((c) => c.type === 'note');
   }
 
   createAuditLog(input: Omit<AuditLogRecord, 'id' | 'createdAt'>): AuditLogRecord {
@@ -275,6 +350,14 @@ class JsonStore {
     return this.data.tickets.find((t) => t.channelId === channelId) ?? null;
   }
 
+  updateTicket(channelId: string, patch: Partial<TicketRecord>): TicketRecord | null {
+    const ticket = this.getTicketByChannel(channelId);
+    if (!ticket) return null;
+    Object.assign(ticket, patch);
+    this.persist();
+    return ticket;
+  }
+
   closeTicket(channelId: string): TicketRecord | null {
     const ticket = this.getTicketByChannel(channelId);
     if (!ticket) return null;
@@ -302,17 +385,127 @@ class JsonStore {
     return ok;
   }
 
-  setTempVoice(guildId: string, channelId: string, ownerId: string): void {
-    this.data.tempVoice[guildId] = { channelId, ownerId };
+  setTempVoice(
+    guildId: string,
+    channelId: string,
+    ownerId: string,
+    panel?: { panelChannelId: string; panelMessageId: string },
+  ): void {
+    this.data.tempVoice[guildId] = {
+      channelId,
+      ownerId,
+      panelChannelId: panel?.panelChannelId,
+      panelMessageId: panel?.panelMessageId,
+      trusted: [],
+      blocked: [],
+    };
     this.persist();
   }
 
-  getTempVoice(guildId: string): { ownerId: string; channelId: string } | null {
+  getTempVoice(guildId: string): TempVoiceRecord | null {
     return this.data.tempVoice[guildId] ?? null;
+  }
+
+  updateTempVoice(guildId: string, patch: Partial<TempVoiceRecord>): TempVoiceRecord | null {
+    const temp = this.getTempVoice(guildId);
+    if (!temp) return null;
+    Object.assign(temp, patch);
+    this.persist();
+    return temp;
+  }
+
+  trackSpamMessage(guildId: string, userId: string, windowMs: number): number {
+    const key = `${guildId}:${userId}`;
+    const now = Date.now();
+    const entry = this.data.spamTracker[key] ?? { timestamps: [] };
+    entry.timestamps = entry.timestamps.filter((t) => now - t < windowMs);
+    entry.timestamps.push(now);
+    this.data.spamTracker[key] = entry;
+    this.persist();
+    return entry.timestamps.length;
+  }
+
+  clearSpamTracker(guildId: string, userId: string): void {
+    delete this.data.spamTracker[`${guildId}:${userId}`];
+    this.persist();
   }
 
   removeTempVoice(guildId: string): void {
     delete this.data.tempVoice[guildId];
+    this.persist();
+  }
+
+  trackRepeatedMessage(guildId: string, userId: string, text: string, windowMs: number): number {
+    const key = `${guildId}:${userId}`;
+    const now = Date.now();
+    const normalized = text.trim().toLowerCase();
+    const entry = this.data.messageTracker[key] ?? { contents: [] };
+    entry.contents = entry.contents.filter((c) => now - c.at < windowMs);
+    entry.contents.push({ text: normalized, at: now });
+    this.data.messageTracker[key] = entry;
+    this.persist();
+    return entry.contents.filter((c) => c.text === normalized).length;
+  }
+
+  trackJoin(guildId: string, windowMs: number): number {
+    const now = Date.now();
+    const entry = this.data.joinTracker[guildId] ?? { timestamps: [] };
+    entry.timestamps = entry.timestamps.filter((t) => now - t < windowMs);
+    entry.timestamps.push(now);
+    this.data.joinTracker[guildId] = entry;
+    this.persist();
+    return entry.timestamps.length;
+  }
+
+  clearJoinTracker(guildId: string): void {
+    delete this.data.joinTracker[guildId];
+    this.persist();
+  }
+
+  setVerifyAccepted(userId: string, ttlMs = 600_000): void {
+    this.data.verifyAccepted[userId] = Date.now() + ttlMs;
+    this.persist();
+  }
+
+  hasVerifyAccepted(userId: string): boolean {
+    const exp = this.data.verifyAccepted[userId];
+    if (!exp || exp < Date.now()) {
+      delete this.data.verifyAccepted[userId];
+      this.persist();
+      return false;
+    }
+    return true;
+  }
+
+  createGiveaway(input: Omit<GiveawayRecord, 'id' | 'entrants'>): GiveawayRecord {
+    const record: GiveawayRecord = {
+      ...input,
+      id: `gw_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      entrants: [],
+    };
+    this.data.giveaways[record.id] = record;
+    this.persist();
+    return record;
+  }
+
+  getGiveaway(id: string): GiveawayRecord | null {
+    return this.data.giveaways[id] ?? null;
+  }
+
+  getGiveawayByMessage(messageId: string): GiveawayRecord | null {
+    return Object.values(this.data.giveaways).find((g) => g.messageId === messageId) ?? null;
+  }
+
+  addGiveawayEntrant(id: string, userId: string): boolean {
+    const gw = this.data.giveaways[id];
+    if (!gw || gw.entrants.includes(userId)) return false;
+    gw.entrants.push(userId);
+    this.persist();
+    return true;
+  }
+
+  removeGiveaway(id: string): void {
+    delete this.data.giveaways[id];
     this.persist();
   }
 }

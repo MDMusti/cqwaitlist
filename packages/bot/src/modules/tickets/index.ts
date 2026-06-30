@@ -8,10 +8,18 @@ import {
   AttachmentBuilder,
 } from 'discord.js';
 import { store } from '../../db/store';
-import { brandEmbed, errorEmbed, successEmbed } from '../../lib/embeds';
-import { buildTicketControls, deptLabel } from './panel';
+import { errorEmbed, primaryEmbed, successEmbed } from '../../lib/ui';
+import { sendUnifiedLog } from '../../lib/logging';
+import {
+  buildTicketControls,
+  buildTicketIntakeModal,
+  buildCloseReasonModal,
+  buildSatisfactionRow,
+  deptLabel,
+} from './panel';
 
 const TRANSCRIPT_DIR = path.join(process.cwd(), 'data', 'transcripts');
+const pendingClose = new Map<string, string>();
 
 async function saveTranscript(channel: TextChannel): Promise<string> {
   if (!fs.existsSync(TRANSCRIPT_DIR)) fs.mkdirSync(TRANSCRIPT_DIR, { recursive: true });
@@ -34,12 +42,83 @@ async function saveTranscript(channel: TextChannel): Promise<string> {
   return filePath;
 }
 
+async function finalizeClose(
+  interaction: Interaction,
+  channel: TextChannel,
+  reason: string,
+): Promise<void> {
+  if (!interaction.guild) return;
+
+  const ticket = store.getTicketByChannel(channel.id);
+  if (!ticket) return;
+
+  const filePath = await saveTranscript(channel);
+  store.closeTicket(channel.id);
+
+  await sendUnifiedLog(
+    interaction.guild,
+    'ticket',
+    'Ticket geschlossen',
+    `<@${ticket.userId}> — ${deptLabel(ticket.department)}`,
+    [
+      { name: 'Abteilung', value: deptLabel(ticket.department), inline: true },
+      { name: 'Geschlossen von', value: `${interaction.user}`, inline: true },
+      { name: 'Grund', value: reason },
+      { name: 'Bewertung', value: 'Wird eingeholt…', inline: true },
+    ],
+  );
+
+  const settings = store.getGuildSettings(interaction.guild.id);
+  const logCh = settings.channels.modLogs ?? settings.channels.logs;
+  if (logCh) {
+    const logChannel = interaction.guild.channels.cache.get(logCh);
+    if (logChannel?.isTextBased()) {
+      const ratingRow = buildSatisfactionRow(ticket.id);
+      await logChannel.send({
+        embeds: [
+          primaryEmbed('Ticket geschlossen — Transcript')
+            .addFields(
+              { name: 'Nutzer', value: `<@${ticket.userId}>`, inline: true },
+              { name: 'Grund', value: reason },
+            ),
+        ],
+        files: [new AttachmentBuilder(filePath, { name: path.basename(filePath) })],
+        components: [ratingRow],
+      });
+    }
+  }
+
+  const user = await interaction.client.users.fetch(ticket.userId).catch(() => null);
+  if (user) {
+    await user
+      .send({
+        embeds: [
+          primaryEmbed('Ticket geschlossen')
+            .setDescription(`Dein Ticket wurde geschlossen.\n\n**Grund:** ${reason}`)
+            .setFooter({ text: 'Wie zufrieden warst du? (optional im Server bewerten)' }),
+        ],
+        components: [buildSatisfactionRow(ticket.id)],
+      })
+      .catch(() => undefined);
+  }
+
+  setTimeout(() => channel.delete('Ticket geschlossen').catch(() => undefined), 5000);
+}
+
 async function handleTicketComponent(interaction: Interaction): Promise<boolean> {
   if (!interaction.guild) return false;
 
   if (interaction.isButton() && interaction.customId.startsWith('ticket:open:')) {
     const dept = interaction.customId.split(':')[2] ?? 'support';
+    await interaction.showModal(buildTicketIntakeModal(dept));
+    return true;
+  }
+
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('ticket:intake:')) {
+    const dept = interaction.customId.split(':')[2] ?? 'support';
     const member = interaction.member as GuildMember;
+    const subject = interaction.fields.getTextInputValue('subject');
+    const description = interaction.fields.getTextInputValue('description');
     const settings = store.getGuildSettings(interaction.guild.id);
 
     const existing = store.getOpenTicket(interaction.guild.id, member.id);
@@ -72,7 +151,7 @@ async function handleTicketComponent(interaction: Interaction): Promise<boolean>
       type: ChannelType.GuildText,
       parent: categoryId ?? undefined,
       permissionOverwrites: overwrites,
-      topic: `${deptLabel(dept)} — ${member.user.tag}`,
+      topic: `${deptLabel(dept)} — ${subject}`,
     });
 
     store.createTicket({
@@ -80,11 +159,15 @@ async function handleTicketComponent(interaction: Interaction): Promise<boolean>
       channelId: channel.id,
       userId: member.id,
       department: dept,
+      subject,
+      description,
     });
 
-    const embed = brandEmbed(`Ticket — ${deptLabel(dept)}`)
-      .setDescription(
-        `Hallo ${member}, dein Ticket wurde erstellt.\n\nBitte beschreibe dein Anliegen. Ein Teammitglied meldet sich bald.`,
+    const embed = primaryEmbed(`Ticket — ${deptLabel(dept)}`)
+      .addFields(
+        { name: 'Betreff', value: subject },
+        { name: 'Beschreibung', value: description },
+        { name: 'Erstellt von', value: `${member}`, inline: true },
       );
 
     await channel.send({ embeds: [embed], components: [buildTicketControls()] });
@@ -94,7 +177,39 @@ async function handleTicketComponent(interaction: Interaction): Promise<boolean>
     return true;
   }
 
-  if (interaction.isButton() && (interaction.customId === 'ticket:close' || interaction.customId === 'ticket:archive')) {
+  if (interaction.isButton() && interaction.customId === 'ticket:claim') {
+    const channel = interaction.channel;
+    if (!channel?.isTextBased() || channel.isDMBased()) return false;
+
+    const ticket = store.getTicketByChannel(channel.id);
+    if (!ticket) {
+      await interaction.reply({ embeds: [errorEmbed('Kein Ticket-Kanal.')], ephemeral: true });
+      return true;
+    }
+    if (ticket.claimedBy) {
+      await interaction.reply({
+        embeds: [errorEmbed(`Bereits übernommen von <@${ticket.claimedBy}>.`)],
+        ephemeral: true,
+      });
+      return true;
+    }
+
+    store.updateTicket(channel.id, { claimedBy: interaction.user.id });
+    await interaction.reply({
+      embeds: [successEmbed(`${interaction.user} hat das Ticket übernommen.`)],
+    });
+
+    await sendUnifiedLog(
+      interaction.guild,
+      'ticket',
+      'Ticket übernommen',
+      `<@${ticket.userId}> — ${deptLabel(ticket.department)}`,
+      [{ name: 'Moderator', value: `${interaction.user}`, inline: true }],
+    );
+    return true;
+  }
+
+  if (interaction.isButton() && interaction.customId === 'ticket:close') {
     const channel = interaction.channel;
     if (!channel?.isTextBased() || channel.isDMBased()) return false;
 
@@ -104,32 +219,48 @@ async function handleTicketComponent(interaction: Interaction): Promise<boolean>
       return true;
     }
 
-    await interaction.deferReply();
+    pendingClose.set(interaction.user.id, channel.id);
+    await interaction.showModal(buildCloseReasonModal());
+    return true;
+  }
 
-    const filePath = await saveTranscript(channel as TextChannel);
-    store.closeTicket(channel.id);
-
-    const settings = store.getGuildSettings(interaction.guild.id);
-    const logCh = settings.channels.modLogs;
-    if (logCh) {
-      const logChannel = interaction.guild.channels.cache.get(logCh);
-      if (logChannel?.isTextBased()) {
-        await logChannel.send({
-          embeds: [
-            brandEmbed('Ticket geschlossen')
-              .addFields(
-                { name: 'Abteilung', value: deptLabel(ticket.department), inline: true },
-                { name: 'Nutzer', value: `<@${ticket.userId}>`, inline: true },
-                { name: 'Geschlossen von', value: `${interaction.user}`, inline: true },
-              ),
-          ],
-          files: [new AttachmentBuilder(filePath, { name: path.basename(filePath) })],
-        });
-      }
+  if (interaction.isModalSubmit() && interaction.customId === 'ticket:close:reason') {
+    const channelId = pendingClose.get(interaction.user.id);
+    pendingClose.delete(interaction.user.id);
+    if (!channelId) {
+      await interaction.reply({ embeds: [errorEmbed('Kein Ticket-Kontext.')], ephemeral: true });
+      return true;
     }
 
-    await interaction.editReply({ embeds: [successEmbed('Ticket wird geschlossen…')] });
-    setTimeout(() => channel.delete('Ticket geschlossen').catch(() => undefined), 3000);
+    const channel = interaction.guild!.channels.cache.get(channelId);
+    if (!channel?.isTextBased() || channel.isDMBased()) {
+      await interaction.reply({ embeds: [errorEmbed('Kanal nicht gefunden.')], ephemeral: true });
+      return true;
+    }
+
+    const reason = interaction.fields.getTextInputValue('reason');
+    await interaction.reply({ embeds: [successEmbed('Ticket wird geschlossen…')] });
+    await finalizeClose(interaction, channel as TextChannel, reason);
+    return true;
+  }
+
+  if (interaction.isButton() && interaction.customId.startsWith('ticket:rate:')) {
+    const parts = interaction.customId.split(':');
+    const ticketId = parts[2];
+    const rating = parts[3];
+
+    await interaction.reply({
+      embeds: [successEmbed(`Danke für deine Bewertung: **${rating}/5** ★`)],
+      ephemeral: true,
+    });
+
+    await sendUnifiedLog(
+      interaction.guild!,
+      'ticket',
+      'Ticket-Bewertung',
+      `Ticket \`${ticketId}\` — ${rating}/5 Sterne`,
+      [{ name: 'Nutzer', value: `${interaction.user}`, inline: true }],
+    );
     return true;
   }
 
@@ -141,6 +272,6 @@ export const ticketsModule: BotModule = {
   label: 'Tickets',
   phase: 2,
   enabled: true,
-  description: 'Support-Panel, private Kanäle, Transkripte',
+  description: 'Modal-Intake, Claim, Close+Grund, Transcript, Bewertung',
   componentHandlers: [handleTicketComponent as ComponentHandler],
 };

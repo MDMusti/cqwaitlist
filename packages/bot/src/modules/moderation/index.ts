@@ -3,13 +3,16 @@ import {
   PermissionFlagsBits,
   type GuildMember,
   type ChatInputCommandInteraction,
+  type Message,
 } from 'discord.js';
 import type { BotCommand, BotModule } from '@cleanqueue/shared';
 import { store } from '../../db/store';
-import { modCaseEmbed } from '../../lib/embeds';
-import { sendGuildLog } from '../../lib/logging';
+import { modCaseEmbed, warningEmbed } from '../../lib/ui';
+import { sendUnifiedLog } from '../../lib/logging';
 import { safeEditReply } from '../../lib/interactions';
 import { isModerator, botNeeds } from '../../lib/permissions';
+import { handleAutomodMessage } from './automod';
+import { handleAntiRaidJoin, logMemberJoin } from './security';
 
 const STRIKE_MUTE_MINUTES = 60;
 const STRIKE_LIMIT = 3;
@@ -27,6 +30,23 @@ async function applyStrikeAndMaybeMute(
     await target.roles.add(settings.roles.muted, 'Automatischer Mute (3 Strikes)').catch(() => undefined);
     await target.timeout(STRIKE_MUTE_MINUTES * 60 * 1000, '3 Strikes — Auto-Mute').catch(() => undefined);
   }
+
+  const dmText =
+    strikes >= STRIKE_LIMIT
+      ? `Du hast **${strikes}/${STRIKE_LIMIT} Strikes** erreicht und wurdest automatisch für **${STRIKE_MUTE_MINUTES} Minuten** stummgeschaltet.`
+      : `Du hast einen Strike erhalten (**${strikes}/${STRIKE_LIMIT}**). Bei ${STRIKE_LIMIT} Strikes folgt ein Auto-Mute.`;
+
+  await target
+    .send({
+      embeds: [
+        warningEmbed(
+          dmText + '\n\nBitte halte dich an unsere Regeln. Bei Fragen: Ticket im Support-Channel.',
+          'Strike-System',
+        ),
+      ],
+    })
+    .catch(() => undefined);
+
   return strikes;
 }
 
@@ -96,12 +116,14 @@ const warnCommand = createModCommand('warn', 'Verwarnt einen Nutzer (Strike-Syst
 
   const strikes = await applyStrikeAndMaybeMute(interaction, target, settings);
 
-  await sendGuildLog(
+  await sendUnifiedLog(
     interaction.guild!,
-    'Warnung',
+    'mod',
+    'Verwarnung',
     `${target} wurde verwarnt.`,
     [
       { name: 'Case', value: `#${caseRecord.caseNumber}`, inline: true },
+      { name: 'Moderator', value: `${interaction.user}`, inline: true },
       { name: 'Strikes', value: `${strikes}/${STRIKE_LIMIT}`, inline: true },
       { name: 'Grund', value: reason },
     ],
@@ -119,11 +141,24 @@ const warnCommand = createModCommand('warn', 'Verwarnt einen Nutzer (Strike-Syst
             targetTag: target.user.tag,
             moderatorTag: interaction.user.tag,
             reason,
+            strikes: `${strikes}/${STRIKE_LIMIT}`,
           }),
         ],
       });
     }
   }
+
+  await target
+    .send({
+      embeds: [
+        warningEmbed(
+          `Du wurdest auf **${interaction.guild!.name}** verwarnt.\n\n` +
+            `**Case:** #${caseRecord.caseNumber}\n**Grund:** ${reason}\n**Strikes:** ${strikes}/${STRIKE_LIMIT}`,
+          'Verwarnung erhalten',
+        ),
+      ],
+    })
+    .catch(() => undefined);
 
   await safeEditReply(interaction, {
     embeds: [
@@ -133,6 +168,7 @@ const warnCommand = createModCommand('warn', 'Verwarnt einen Nutzer (Strike-Syst
         targetTag: target.user.tag,
         moderatorTag: interaction.user.tag,
         reason: `${reason}\n\nStrikes: ${strikes}/${STRIKE_LIMIT}`,
+        strikes: `${strikes}/${STRIKE_LIMIT}`,
       }),
     ],
   });
@@ -159,6 +195,11 @@ const muteCommand = createModCommand('mute', 'Stummschaltet einen Nutzer (Timeou
     status: 'open',
     duration: 60,
   });
+
+  await sendUnifiedLog(interaction.guild!, 'mod', 'Mute', `${target} stummgeschaltet.`, [
+    { name: 'Case', value: `#${caseRecord.caseNumber}`, inline: true },
+    { name: 'Grund', value: reason },
+  ]);
 
   await safeEditReply(interaction, {
     embeds: [
@@ -189,6 +230,11 @@ const kickCommand = createModCommand('kick', 'Kickt einen Nutzer vom Server', as
     reason,
     status: 'closed',
   });
+
+  await sendUnifiedLog(interaction.guild!, 'mod', 'Kick', `${target.user.tag} gekickt.`, [
+    { name: 'Case', value: `#${caseRecord.caseNumber}`, inline: true },
+    { name: 'Grund', value: reason },
+  ]);
 
   await target.kick(reason);
   await safeEditReply(interaction, {
@@ -221,6 +267,11 @@ const banCommand = createModCommand('ban', 'Bannt einen Nutzer', async (interact
     status: 'closed',
   });
 
+  await sendUnifiedLog(interaction.guild!, 'mod', 'Ban', `${target.user.tag} gebannt.`, [
+    { name: 'Case', value: `#${caseRecord.caseNumber}`, inline: true },
+    { name: 'Grund', value: reason },
+  ]);
+
   await target.ban({ reason });
   await safeEditReply(interaction, {
     embeds: [
@@ -235,7 +286,7 @@ const banCommand = createModCommand('ban', 'Bannt einen Nutzer', async (interact
   });
 });
 
-const timeoutCommand = createModCommand('timeout', 'Timeout für einen Nutzer (Minuten)', async (interaction, target) => {
+const timeoutCommand = createModCommand('timeout', 'Timeout für einen Nutzer (10 Min)', async (interaction, target) => {
   const reason = interaction.options.getString('reason') ?? 'Kein Grund';
   const minutes = 10;
   const err = botNeeds(interaction.member as GuildMember, [PermissionFlagsBits.ModerateMembers]);
@@ -256,6 +307,11 @@ const timeoutCommand = createModCommand('timeout', 'Timeout für einen Nutzer (M
     duration: minutes,
   });
 
+  await sendUnifiedLog(interaction.guild!, 'mod', 'Timeout', `${target} Timeout (${minutes} Min).`, [
+    { name: 'Case', value: `#${caseRecord.caseNumber}`, inline: true },
+    { name: 'Grund', value: reason },
+  ]);
+
   await safeEditReply(interaction, {
     embeds: [
       modCaseEmbed({
@@ -269,11 +325,167 @@ const timeoutCommand = createModCommand('timeout', 'Timeout für einen Nutzer (M
   });
 });
 
+const modCommand: BotCommand = {
+  name: 'mod',
+  moduleId: 'moderation',
+  deferReply: true,
+  data: new SlashCommandBuilder()
+    .setName('mod')
+    .setDescription('Moderations-Toolkit — Warn, Mute, Kick, Ban, Timeout, History')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+    .addSubcommand((sub) =>
+      sub
+        .setName('warn')
+        .setDescription('Verwarnt einen Nutzer (Strike-System)')
+        .addUserOption((o) => o.setName('user').setDescription('Ziel-Nutzer').setRequired(true))
+        .addStringOption((o) => o.setName('reason').setDescription('Grund').setRequired(false)),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('mute')
+        .setDescription('Stummschaltet einen Nutzer (60 Min)')
+        .addUserOption((o) => o.setName('user').setDescription('Ziel-Nutzer').setRequired(true))
+        .addStringOption((o) => o.setName('reason').setDescription('Grund').setRequired(false)),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('kick')
+        .setDescription('Kickt einen Nutzer')
+        .addUserOption((o) => o.setName('user').setDescription('Ziel-Nutzer').setRequired(true))
+        .addStringOption((o) => o.setName('reason').setDescription('Grund').setRequired(false)),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('ban')
+        .setDescription('Bannt einen Nutzer')
+        .addUserOption((o) => o.setName('user').setDescription('Ziel-Nutzer').setRequired(true))
+        .addStringOption((o) => o.setName('reason').setDescription('Grund').setRequired(false)),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('timeout')
+        .setDescription('Timeout (10 Min)')
+        .addUserOption((o) => o.setName('user').setDescription('Ziel-Nutzer').setRequired(true))
+        .addStringOption((o) => o.setName('reason').setDescription('Grund').setRequired(false)),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('history')
+        .setDescription('Moderations-Historie eines Nutzers')
+        .addUserOption((o) => o.setName('user').setDescription('Ziel-Nutzer').setRequired(true)),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('note')
+        .setDescription('Interne Moderations-Notiz')
+        .addUserOption((o) => o.setName('user').setDescription('Ziel-Nutzer').setRequired(true))
+        .addStringOption((o) =>
+          o.setName('text').setDescription('Notiz-Text').setRequired(true).setMaxLength(500),
+        ),
+    ),
+  async execute(interaction) {
+    const sub = interaction.options.getSubcommand();
+
+    if (sub === 'warn') return warnCommand.execute(interaction);
+    if (sub === 'mute') return muteCommand.execute(interaction);
+    if (sub === 'kick') return kickCommand.execute(interaction);
+    if (sub === 'ban') return banCommand.execute(interaction);
+    if (sub === 'timeout') return timeoutCommand.execute(interaction);
+
+    if (!interaction.guild || !interaction.member) {
+      await safeEditReply(interaction, { content: 'Nur auf Servern.', ephemeral: true });
+      return;
+    }
+
+    const settings = store.getGuildSettings(interaction.guild.id);
+    if (!isModerator(interaction.member as GuildMember, settings)) {
+      await safeEditReply(interaction, { content: 'Keine Berechtigung.', ephemeral: true });
+      return;
+    }
+
+    if (sub === 'history') {
+      const user = interaction.options.getUser('user', true);
+      const cases = store.getCasesForUser(interaction.guild.id, user.id).filter((c) => c.type !== 'note');
+
+      const lines =
+        cases.length === 0
+          ? 'Keine Einträge.'
+          : cases
+              .slice(0, 15)
+              .map(
+                (c) =>
+                  `**#${c.caseNumber}** \`${c.type}\` — ${c.reason ?? '—'} (<t:${Math.floor(new Date(c.createdAt).getTime() / 1000)}:d>)`,
+              )
+              .join('\n');
+
+      await safeEditReply(interaction, {
+        embeds: [
+          modCaseEmbed({
+            caseNumber: cases[0]?.caseNumber ?? 0,
+            type: 'history',
+            targetTag: user.tag,
+            moderatorTag: '—',
+            reason: lines,
+          }).setTitle(`🛡️ Mod-History — ${user.tag}`),
+        ],
+      });
+      return;
+    }
+
+    if (sub === 'note') {
+      const user = interaction.options.getUser('user', true);
+      const text = interaction.options.getString('text', true);
+
+      const caseRecord = store.createCase({
+        guildId: interaction.guild.id,
+        targetId: user.id,
+        moderatorId: interaction.user.id,
+        type: 'note',
+        reason: text,
+        status: 'open',
+      });
+
+      await sendUnifiedLog(interaction.guild, 'mod', 'Mod-Notiz', `Notiz für ${user.tag}`, [
+        { name: 'Case', value: `#${caseRecord.caseNumber}`, inline: true },
+        { name: 'Moderator', value: `${interaction.user}`, inline: true },
+        { name: 'Notiz', value: text },
+      ]);
+
+      await safeEditReply(interaction, {
+        embeds: [
+          modCaseEmbed({
+            caseNumber: caseRecord.caseNumber,
+            type: 'note',
+            targetTag: user.tag,
+            moderatorTag: interaction.user.tag,
+            reason: text,
+          }),
+        ],
+      });
+    }
+  },
+};
+
 export const moderationModule: BotModule = {
   id: 'moderation',
   label: 'Moderation',
   phase: 2,
   enabled: true,
-  description: 'Warn, Mute, Kick, Ban, Timeout, Strike-System, Cases',
-  commands: [warnCommand, muteCommand, kickCommand, banCommand, timeoutCommand],
+  description: 'AutoMod, Warn/Mute/Kick/Ban, Cases, Anti-Raid, Quarantine',
+  commands: [modCommand],
+  events: [
+    {
+      name: 'messageCreate',
+      async execute(message: Message) {
+        await handleAutomodMessage(message);
+      },
+    },
+    {
+      name: 'guildMemberAdd',
+      async execute(member: GuildMember) {
+        await logMemberJoin(member);
+        await handleAntiRaidJoin(member);
+      },
+    },
+  ],
 };

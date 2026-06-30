@@ -56,6 +56,7 @@ export const BRAND_COLOR = 0x7c5cfc;
 export interface GuildChannels {
   verify?: string;
   rules?: string;
+  rulesDetailed?: string;
   welcome?: string;
   general?: string;
   tickets?: string;
@@ -66,6 +67,25 @@ export interface GuildChannels {
   modLogs?: string;
   createVoice?: string;
   voiceCategory?: string;
+  voiceControl?: string;
+  events?: string;
+  botCommands?: string;
+  levelUp?: string;
+  modOnly?: string;
+  partner?: string;
+  automodNotice?: string;
+}
+
+export interface GuildAutoModSettings {
+  blockInvites?: boolean;
+  maxMentions?: number;
+  spamThreshold?: number;
+  spamWindowMs?: number;
+  capsThreshold?: number;
+  capsMinLength?: number;
+  repeatedTextCount?: number;
+  repeatedTextWindowMs?: number;
+  quarantineOnViolation?: boolean;
 }
 
 export interface GuildRoles {
@@ -73,14 +93,26 @@ export interface GuildRoles {
   member?: string;
   moderator?: string;
   muted?: string;
+  quarantine?: string;
+  level5?: string;
+  level10?: string;
+  level25?: string;
   gamer?: string;
   artist?: string;
   developer?: string;
   streamer?: string;
 }
 
+export interface GuildWelcomeSettings {
+  leaveMessageEnabled?: boolean;
+  leaveMessage?: string;
+}
+
 export interface GuildModuleSettings {
   channels: GuildChannels;
   roles: GuildRoles;
   verification?: { minAccountAgeDays: number };
+  automod?: GuildAutoModSettings;
+  welcome?: GuildWelcomeSettings;
+  antiRaid?: { joinThreshold: number; windowMs: number };
 }
