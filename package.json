@@ -11,7 +11,7 @@
     "start:api": "node server.js",
     "start:bot": "npm run start -w @cleanqueue/bot",
     "dev:bot": "npm run dev -w @cleanqueue/bot",
-    "build": "npm run build -w @cleanqueue/shared && npm run build -w @cleanqueue/bot",
+    "build": "npm run build -w @cleanqueue/shared && npm run build -w @cleanqueue/bot && node scripts/verify-bot-build.js",
     "build:netlify": "node scripts/generate-config.js",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",

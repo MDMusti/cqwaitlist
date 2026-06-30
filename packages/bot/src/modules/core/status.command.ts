@@ -3,6 +3,7 @@ import type { BotCommand, BotModule } from '@cleanqueue/shared';
 import { APP_NAME, APP_VERSION } from '@cleanqueue/shared';
 import type { ModuleRegistry } from '../../core/ModuleRegistry';
 import { config } from '../../config';
+import { safeEditReply } from '../../lib/interactions';
 
 function formatModuleStatus(modules: BotModule[]): string {
   return modules
@@ -17,6 +18,7 @@ export function createStatusCommand(registry: ModuleRegistry): BotCommand {
   return {
     name: 'cleanqueue',
     moduleId: 'core',
+    deferReply: { ephemeral: true },
     data: new SlashCommandBuilder()
       .setName('cleanqueue')
       .setDescription(`${APP_NAME} system commands`)
@@ -24,7 +26,10 @@ export function createStatusCommand(registry: ModuleRegistry): BotCommand {
         sub.setName('status').setDescription('System info and module status'),
       ),
     async execute(interaction) {
-      if (interaction.options.getSubcommand() !== 'status') return;
+      if (interaction.options.getSubcommand() !== 'status') {
+        await safeEditReply(interaction, { content: 'Unbekannter Subcommand.', ephemeral: true });
+        return;
+      }
 
       const modules = registry.list();
       const uptime = process.uptime();
@@ -64,7 +69,7 @@ export function createStatusCommand(registry: ModuleRegistry): BotCommand {
         .setFooter({ text: 'CleanQueue · /cleanqueue status' })
         .setTimestamp();
 
-      await interaction.reply({ embeds: [embed], ephemeral: true });
+      await safeEditReply(interaction, { embeds: [embed] });
     },
   };
 }

@@ -17,7 +17,9 @@ export function loadConfig(): EnvConfig {
 
   if (!parsed.success) {
     const issues = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('\n');
-    throw new Error(`Invalid environment configuration:\n${issues}`);
+    const hint =
+      'Setze BOT_TOKEN und CLIENT_ID in Render (Environment) bzw. .env lokal. GUILD_ID ist optional.';
+    throw new Error(`Invalid environment configuration:\n${issues}\n\n${hint}`);
   }
 
   return parsed.data;

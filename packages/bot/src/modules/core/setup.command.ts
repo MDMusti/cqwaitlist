@@ -20,6 +20,7 @@ export function createSetupCommand(): BotCommand {
   return {
     name: 'setup',
     moduleId: 'core',
+    deferReply: { ephemeral: true },
     data: new SlashCommandBuilder()
       .setName('setup')
       .setDescription('CleanQueue Server-Struktur einrichten (Admin)')
@@ -28,13 +29,14 @@ export function createSetupCommand(): BotCommand {
         sub.setName('server').setDescription('Rollen, Kategorien, Channels und Panels anlegen'),
       ),
     async execute(interaction) {
-      if (interaction.options.getSubcommand() !== 'server') return;
-      if (!interaction.guild) {
-        await interaction.reply({ content: 'Nur auf Servern verfügbar.', ephemeral: true });
+      if (interaction.options.getSubcommand() !== 'server') {
+        await interaction.editReply({ content: 'Unbekannter Subcommand.' });
         return;
       }
-
-      await interaction.deferReply({ ephemeral: true });
+      if (!interaction.guild) {
+        await interaction.editReply({ content: 'Nur auf Servern verfügbar.' });
+        return;
+      }
 
       const guild = interaction.guild;
       const me = guild.members.me;

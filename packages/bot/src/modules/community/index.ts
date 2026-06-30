@@ -103,6 +103,7 @@ function suggestCommand() {
   return {
     name: 'suggest',
     moduleId: 'community',
+    deferReply: { ephemeral: true },
     data: new SlashCommandBuilder()
       .setName('suggest')
       .setDescription('Sende einen Vorschlag an das Team')
@@ -111,7 +112,7 @@ function suggestCommand() {
       ),
     async execute(interaction: import('discord.js').ChatInputCommandInteraction) {
       if (!interaction.guild) {
-        await interaction.reply({ content: 'Nur auf Servern.', ephemeral: true });
+        await interaction.editReply({ content: 'Nur auf Servern.' });
         return;
       }
       const text = interaction.options.getString('text', true);
@@ -132,9 +133,8 @@ function suggestCommand() {
         }
       }
 
-      await interaction.reply({
+      await interaction.editReply({
         embeds: [successEmbed('Vorschlag wurde eingereicht. Danke!')],
-        ephemeral: true,
       });
     },
   };

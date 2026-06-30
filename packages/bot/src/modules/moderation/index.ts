@@ -8,7 +8,8 @@ import type { BotCommand, BotModule } from '@cleanqueue/shared';
 import { store } from '../../db/store';
 import { modCaseEmbed } from '../../lib/embeds';
 import { sendGuildLog } from '../../lib/logging';
-import { botNeeds, requireModerator } from '../../lib/permissions';
+import { safeEditReply } from '../../lib/interactions';
+import { isModerator, botNeeds } from '../../lib/permissions';
 
 const STRIKE_MUTE_MINUTES = 60;
 const STRIKE_LIMIT = 3;
@@ -37,6 +38,7 @@ function createModCommand(
   return {
     name,
     moduleId: 'moderation',
+    deferReply: true,
     data: new SlashCommandBuilder()
       .setName(name)
       .setDescription(description)
@@ -44,18 +46,33 @@ function createModCommand(
       .addUserOption((o) => o.setName('user').setDescription('Ziel-Nutzer').setRequired(true))
       .addStringOption((o) => o.setName('reason').setDescription('Grund').setRequired(false)),
     async execute(interaction) {
-      const ctx = await requireModerator(interaction);
-      if (!ctx) return;
+      if (!interaction.guild || !interaction.member) {
+        await safeEditReply(interaction, { content: 'Nur auf Servern verfügbar.', ephemeral: true });
+        return;
+      }
+
+      const member = interaction.member as GuildMember;
+      const settings = store.getGuildSettings(interaction.guild.id);
+      if (!isModerator(member, settings)) {
+        await safeEditReply(interaction, {
+          content: 'Du benötigst Moderator-Rechte für diesen Befehl.',
+          ephemeral: true,
+        });
+        return;
+      }
 
       const targetUser = interaction.options.getUser('user', true);
-      const target = await interaction.guild!.members.fetch(targetUser.id).catch(() => null);
+      const target = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
       if (!target) {
-        await interaction.reply({ content: 'Nutzer nicht auf dem Server.', ephemeral: true });
+        await safeEditReply(interaction, { content: 'Nutzer nicht auf dem Server.', ephemeral: true });
         return;
       }
 
       if (target.id === interaction.user.id) {
-        await interaction.reply({ content: 'Du kannst dich nicht selbst moderieren.', ephemeral: true });
+        await safeEditReply(interaction, {
+          content: 'Du kannst dich nicht selbst moderieren.',
+          ephemeral: true,
+        });
         return;
       }
 
@@ -108,7 +125,7 @@ const warnCommand = createModCommand('warn', 'Verwarnt einen Nutzer (Strike-Syst
     }
   }
 
-  await interaction.reply({
+  await safeEditReply(interaction, {
     embeds: [
       modCaseEmbed({
         caseNumber: caseRecord.caseNumber,
@@ -126,7 +143,7 @@ const muteCommand = createModCommand('mute', 'Stummschaltet einen Nutzer (Timeou
   const settings = store.getGuildSettings(interaction.guild!.id);
   const err = botNeeds(interaction.member as GuildMember, [PermissionFlagsBits.ModerateMembers]);
   if (err) {
-    await interaction.reply({ content: err, ephemeral: true });
+    await safeEditReply(interaction, { content: err, ephemeral: true });
     return;
   }
 
@@ -143,7 +160,7 @@ const muteCommand = createModCommand('mute', 'Stummschaltet einen Nutzer (Timeou
     duration: 60,
   });
 
-  await interaction.reply({
+  await safeEditReply(interaction, {
     embeds: [
       modCaseEmbed({
         caseNumber: caseRecord.caseNumber,
@@ -160,7 +177,7 @@ const kickCommand = createModCommand('kick', 'Kickt einen Nutzer vom Server', as
   const reason = interaction.options.getString('reason') ?? 'Kein Grund';
   const err = botNeeds(interaction.member as GuildMember, [PermissionFlagsBits.KickMembers]);
   if (err) {
-    await interaction.reply({ content: err, ephemeral: true });
+    await safeEditReply(interaction, { content: err, ephemeral: true });
     return;
   }
 
@@ -174,7 +191,7 @@ const kickCommand = createModCommand('kick', 'Kickt einen Nutzer vom Server', as
   });
 
   await target.kick(reason);
-  await interaction.reply({
+  await safeEditReply(interaction, {
     embeds: [
       modCaseEmbed({
         caseNumber: caseRecord.caseNumber,
@@ -191,7 +208,7 @@ const banCommand = createModCommand('ban', 'Bannt einen Nutzer', async (interact
   const reason = interaction.options.getString('reason') ?? 'Kein Grund';
   const err = botNeeds(interaction.member as GuildMember, [PermissionFlagsBits.BanMembers]);
   if (err) {
-    await interaction.reply({ content: err, ephemeral: true });
+    await safeEditReply(interaction, { content: err, ephemeral: true });
     return;
   }
 
@@ -205,7 +222,7 @@ const banCommand = createModCommand('ban', 'Bannt einen Nutzer', async (interact
   });
 
   await target.ban({ reason });
-  await interaction.reply({
+  await safeEditReply(interaction, {
     embeds: [
       modCaseEmbed({
         caseNumber: caseRecord.caseNumber,
@@ -223,7 +240,7 @@ const timeoutCommand = createModCommand('timeout', 'Timeout für einen Nutzer (M
   const minutes = 10;
   const err = botNeeds(interaction.member as GuildMember, [PermissionFlagsBits.ModerateMembers]);
   if (err) {
-    await interaction.reply({ content: err, ephemeral: true });
+    await safeEditReply(interaction, { content: err, ephemeral: true });
     return;
   }
 
@@ -239,7 +256,7 @@ const timeoutCommand = createModCommand('timeout', 'Timeout für einen Nutzer (M
     duration: minutes,
   });
 
-  await interaction.reply({
+  await safeEditReply(interaction, {
     embeds: [
       modCaseEmbed({
         caseNumber: caseRecord.caseNumber,

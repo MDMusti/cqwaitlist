@@ -18,6 +18,8 @@ export interface BotCommand {
   data: SlashCommandData;
   /** Optional module id for status reporting. */
   moduleId?: string;
+  /** Defer reply before execute to avoid Discord's 3s interaction timeout. */
+  deferReply?: boolean | { ephemeral?: boolean };
   execute(interaction: ChatInputCommandInteraction): Promise<void>;
 }
 

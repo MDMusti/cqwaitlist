@@ -13,6 +13,15 @@ import { loggingModule } from './modules/logging';
 import { gamesModule } from './modules/games';
 
 async function main(): Promise<void> {
+  logger.info(
+    {
+      guildId: config.GUILD_ID ?? 'not set (global commands)',
+      clientId: config.CLIENT_ID,
+      hasBotToken: Boolean(config.BOT_TOKEN),
+    },
+    'Starting CleanQueue bot',
+  );
+
   const registry = new ModuleRegistry();
 
   registry.register(createCoreModule(registry));
@@ -31,9 +40,10 @@ async function main(): Promise<void> {
   client.on('error', (err) => logger.error({ err }, 'Discord client error'));
 
   await client.login(config.BOT_TOKEN);
+  logger.info('Discord login successful');
 }
 
 main().catch((err) => {
-  logger.fatal({ err }, 'Bot failed to start');
+  logger.fatal({ err }, 'Bot failed to start — check BOT_TOKEN and CLIENT_ID in Render env vars');
   process.exit(1);
 });

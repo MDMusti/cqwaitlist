@@ -51,6 +51,8 @@ async function handleTicketComponent(interaction: Interaction): Promise<boolean>
       return true;
     }
 
+    await interaction.deferReply({ ephemeral: true });
+
     const categoryId = settings.channels.ticketCategory;
     const modRoleId = settings.roles.moderator;
 
@@ -86,9 +88,8 @@ async function handleTicketComponent(interaction: Interaction): Promise<boolean>
       );
 
     await channel.send({ embeds: [embed], components: [buildTicketControls()] });
-    await interaction.reply({
+    await interaction.editReply({
       embeds: [successEmbed(`Ticket erstellt: ${channel}`)],
-      ephemeral: true,
     });
     return true;
   }
