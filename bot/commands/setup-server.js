@@ -5,7 +5,9 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  RoleSelectMenuBuilder,
+  StringSelectMenuBuilder,
+  StringSelectMenuOptionBuilder,
+  MessageFlags,
 } = require('discord.js');
 const { TICKET_BUTTON } = require('../systems/tickets');
 const { VERIFY_BUTTON } = require('../systems/verification');
@@ -30,7 +32,12 @@ const STAFF_ROLES = ['Admin', 'Moderator', 'Support'];
 async function getOrCreateRole(guild, def) {
   let role = guild.roles.cache.find((r) => r.name === def.name);
   if (!role) {
-    role = await guild.roles.create({ name: def.name, color: def.color, hoist: def.hoist, reason: 'CleanQueue Setup' });
+    role = await guild.roles.create({
+      name: def.name,
+      colors: { primaryColor: def.color },
+      hoist: def.hoist,
+      reason: 'CleanQueue Setup',
+    });
   }
   return role;
 }
@@ -106,7 +113,7 @@ module.exports = {
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction) {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const guild = interaction.guild;
 
     for (const def of ROLE_DEFS) await getOrCreateRole(guild, def);
@@ -130,8 +137,8 @@ module.exports = {
     await createVoiceChannel(guild, 'voice-3', catVoice);
     const chStaff = await createTextChannel(guild, 'staff-only', catStaff, { staffOnly: true });
 
-    const communityRoleIds = ['Gamer', 'Artist', 'Music', 'Events']
-      .map((n) => guild.roles.cache.find((r) => r.name === n)?.id)
+    const communityRoles = ['Gamer', 'Artist', 'Music', 'Events']
+      .map((n) => guild.roles.cache.find((r) => r.name === n))
       .filter(Boolean);
 
     await chWillkommen.send({
@@ -176,23 +183,30 @@ module.exports = {
       ],
     });
 
-    await chChat.send({
+    const communityPanel = {
       embeds: [{
         color: 0x7c5cfc,
         title: '🎮 Community-Rollen',
         description: 'Wähle deine Interessen aus der Liste unten — du kannst mehrere Rollen auswählen.',
       }],
-      components: [
+    };
+    if (communityRoles.length) {
+      communityPanel.components = [
         new ActionRowBuilder().addComponents(
-          new RoleSelectMenuBuilder()
+          new StringSelectMenuBuilder()
             .setCustomId(COMMUNITY_SELECT)
             .setPlaceholder('Interessen wählen…')
             .setMinValues(0)
-            .setMaxValues(4)
-            .addRoles(communityRoleIds)
+            .setMaxValues(Math.min(4, communityRoles.length))
+            .addOptions(
+              communityRoles.map((role) =>
+                new StringSelectMenuOptionBuilder().setLabel(role.name).setValue(role.id)
+              )
+            )
         ),
-      ],
-    });
+      ];
+    }
+    await chChat.send(communityPanel);
 
     await chBewerbung.send({
       embeds: [{

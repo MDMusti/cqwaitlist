@@ -1,7 +1,7 @@
 const { registerCommands } = require('../register-commands');
 
 module.exports = {
-  name: 'ready',
+  name: 'clientReady',
   once: true,
   async execute(client) {
     console.log(`[Bot] Eingeloggt als ${client.user.tag}`);
