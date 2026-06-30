@@ -1,7 +1,20 @@
 node_modules/
+.npm-cache/
 .env
-bot/data/
 npm-debug.log
 dist/
 build/
 .DS_Store
+packages/bot/dist/
+packages/shared/dist/
+packages/api/dist/
+
+# Prisma
+prisma/*.db
+
+# Runtime data
+waitlist.json
+
+# Logs
+*.log
+logs/

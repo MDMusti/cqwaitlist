@@ -1,0 +1,11 @@
+{
+  "name": "@cleanqueue/api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CleanQueue REST API — waitlist and future dashboard (Phase 2+)",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "echo \"@cleanqueue/api: Phase 1 placeholder — Express waitlist runs via root server.js\"",
+    "start": "echo \"Use npm run start:api from repo root\""
+  }
+}

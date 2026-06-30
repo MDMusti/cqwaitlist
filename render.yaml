@@ -8,7 +8,7 @@ services:
     runtime: node
     plan: free
     region: frankfurt
-    buildCommand: npm install && npm run deploy-commands
+    buildCommand: npm install && npm run build
     startCommand: npm start
     healthCheckPath: /api/stats
     autoDeploy: true
@@ -28,4 +28,8 @@ services:
       - key: FRONTEND_URL
         sync: false
       - key: REDIRECT_URI
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
         sync: false
