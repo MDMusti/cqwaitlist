@@ -6,7 +6,18 @@ Phase-1-MVP: Server-Setup, Tickets, Altersverifizierung und Level-System neben d
 
 - Node.js 18+
 - Discord-Application mit Bot-Token ([Developer Portal](https://discord.com/developers/applications))
-- Bot eingeladen mit Berechtigungen: `Manage Roles`, `Manage Channels`, `Send Messages`, `Read Message History`, `Add Reactions`
+- Bot eingeladen mit Scope **`bot`** und **`applications.commands`** (ohne `applications.commands` erscheinen Slash-Commands nicht)
+- Berechtigungen: `Manage Roles`, `Manage Channels`, `Send Messages`, `Read Message History`, `Add Reactions` (für Setup: Administrator empfohlen)
+
+### Bot einladen (Invite-URL)
+
+Ersetze `DEINE_CLIENT_ID` durch die Application ID aus dem Developer Portal:
+
+```
+https://discord.com/api/oauth2/authorize?client_id=DEINE_CLIENT_ID&permissions=8&scope=bot%20applications.commands
+```
+
+`permissions=8` = Administrator. Für weniger Rechte den Permission-Wert im [Discord Permission Calculator](https://discordapi.com/permissions.html) anpassen — **`scope=bot%20applications.commands` muss immer enthalten sein.**
 
 ### Bot-Intents aktivieren
 
@@ -37,7 +48,9 @@ npm install
 
 ## Commands deployen
 
-Registriert `/setup-server` auf deinem Guild:
+Slash-Commands werden **automatisch beim Bot-Start** registriert (Guild, wenn `GUILD_ID` gesetzt; sonst global).
+
+Manuell deployen (optional, z. B. lokal ohne Server-Start):
 
 ```bash
 npm run deploy-commands
@@ -83,7 +96,8 @@ Der Command erstellt:
 ```
 bot/
 ├── index.js              # Client, Intents, startBot()
-├── deploy-commands.js    # Guild-Command-Registrierung
+├── register-commands.js  # Guild/Global-Command-Registrierung
+├── deploy-commands.js    # CLI-Wrapper für register-commands
 ├── commands/
 │   └── setup-server.js   # /setup-server Slash-Command
 ├── events/
@@ -108,7 +122,7 @@ bot/
 | Problem | Lösung |
 |---------|--------|
 | Bot startet nicht | `BOT_TOKEN` prüfen, Intents aktivieren |
-| `/setup-server` unsichtbar | `npm run deploy-commands` ausführen, 1–2 Min warten |
+| `/setup-server` unsichtbar | Bot mit `applications.commands`-Scope neu einladen; Render redeployen (Commands registrieren beim Start); Discord-Cache: Cmd+R oder Bot neu starten; `GUILD_ID` und `CLIENT_ID` in Render prüfen |
 | Buttons reagieren nicht | Bot braucht `Manage Channels` + `Manage Roles` |
 | RoleSelect leer | `/setup-server` erneut ausführen (Rollen müssen existieren) |
 
