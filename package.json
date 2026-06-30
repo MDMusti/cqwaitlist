@@ -6,9 +6,11 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "build:netlify": "node scripts/generate-config.js"
+    "build:netlify": "node scripts/generate-config.js",
+    "deploy-commands": "node bot/deploy-commands.js"
   },
   "dependencies": {
+    "discord.js": "^14.16.3",
     "express": "^4.18.2",
     "axios": "^1.6.0",
     "cors": "^2.8.5",

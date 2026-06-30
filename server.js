@@ -293,3 +293,6 @@ app.listen(PORT, () => {
 ╚══════════════════════════════════════╝
   `);
 });
+
+const { startBot } = require('./bot');
+startBot().catch((err) => console.error('[Bot] Start fehlgeschlagen:', err.message));
