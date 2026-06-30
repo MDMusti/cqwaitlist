@@ -35,7 +35,7 @@ export function createStatusCommand(registry: ModuleRegistry): BotCommand {
       const embed = new EmbedBuilder()
         .setColor(0x7c5cfc)
         .setTitle(`${APP_NAME} — System Status`)
-        .setDescription('Enterprise modular Discord platform — Phase 1 core')
+        .setDescription('Enterprise modular Discord platform — alle Phasen aktiv')
         .addFields(
           { name: 'Version', value: `\`${APP_VERSION}\``, inline: true },
           { name: 'Node.js', value: `\`${process.version}\``, inline: true },

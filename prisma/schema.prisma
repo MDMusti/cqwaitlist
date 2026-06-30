@@ -1,5 +1,4 @@
-// CleanQueue — Phase 1 schema stubs
-// Full models will be expanded in Phase 2+ per module.
+// CleanQueue — Full schema (Phases 2–5)
 
 generator client {
   provider = "prisma-client-js"
@@ -15,12 +14,14 @@ model GuildConfig {
   id        String   @id // Discord guild snowflake
   name      String?
   locale    String   @default("de")
+  config    Json     @default("{}")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   members   Member[]
   auditLogs AuditLog[]
   cases     Case[]
+  tickets   Ticket[]
 
   @@map("guild_configs")
 }
@@ -43,11 +44,19 @@ model User {
 
 /// Guild membership link between User and GuildConfig.
 model Member {
-  id        String   @id @default(cuid())
-  guildId   String
-  userId    String
-  joinedAt  DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String    @id @default(cuid())
+  guildId     String
+  userId      String
+  joinedAt    DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  verified    Boolean   @default(false)
+  verifiedAt  DateTime?
+  xp          Int       @default(0)
+  level       Int       @default(1)
+  strikes     Int       @default(0)
+  streakDays  Int       @default(0)
+  lastDaily   DateTime?
+  lastXpAt    DateTime?
 
   guild GuildConfig @relation(fields: [guildId], references: [id], onDelete: Cascade)
   user  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -56,26 +65,30 @@ model Member {
   @@map("members")
 }
 
-/// Moderation case stub — expanded in Phase 2 (moderation module).
+/// Moderation case with strike tracking.
 model Case {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   guildId     String
+  caseNumber  Int
   targetId    String
   moderatorId String?
-  type        String   // warn | mute | kick | ban | note
+  type        String // warn | mute | kick | ban | timeout | note
   reason      String?
-  status      String   @default("open")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  status      String    @default("open")
+  duration    Int? // minutes for mute/timeout
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   guild  GuildConfig @relation(fields: [guildId], references: [id], onDelete: Cascade)
   target User        @relation("CaseTarget", fields: [targetId], references: [id], onDelete: Cascade)
 
   @@index([guildId, targetId])
+  @@index([guildId, caseNumber])
   @@map("cases")
 }
 
-/// Audit log entry stub — expanded in Phase 2 (logging module).
+/// Audit log entry for logging module.
 model AuditLog {
   id        String   @id @default(cuid())
   guildId   String
@@ -90,4 +103,21 @@ model AuditLog {
 
   @@index([guildId, createdAt])
   @@map("audit_logs")
+}
+
+/// Support ticket channel record.
+model Ticket {
+  id         String    @id @default(cuid())
+  guildId    String
+  channelId  String    @unique
+  userId     String
+  department String
+  status     String    @default("open")
+  createdAt  DateTime  @default(now())
+  closedAt   DateTime?
+
+  guild GuildConfig @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@index([guildId, userId])
+  @@map("tickets")
 }

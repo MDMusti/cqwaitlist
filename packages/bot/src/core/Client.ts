@@ -21,8 +21,10 @@ export class CleanQueueClient extends Client {
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildVoiceStates,
+        GatewayIntentBits.GuildModeration,
       ],
-      partials: [Partials.Channel, Partials.GuildMember],
+      partials: [Partials.Channel, Partials.GuildMember, Partials.Message],
     });
   }
 

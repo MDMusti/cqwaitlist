@@ -21,11 +21,15 @@ export interface BotCommand {
   execute(interaction: ChatInputCommandInteraction): Promise<void>;
 }
 
-export type BotEvent<K extends keyof ClientEvents = keyof ClientEvents> = {
-  name: K;
+export interface BotEvent {
+  name: keyof ClientEvents;
   once?: boolean;
-  execute(...args: ClientEvents[K]): Promise<void> | void;
-};
+  execute: (...args: any[]) => Promise<void> | void;
+}
+
+export type ComponentHandler = (
+  interaction: import('discord.js').Interaction,
+) => Promise<boolean>;
 
 export interface BotModule {
   /** Stable module identifier, e.g. "moderation". */
@@ -38,7 +42,43 @@ export interface BotModule {
   description?: string;
   commands?: BotCommand[];
   events?: BotEvent[];
+  /** Handle button/modal/select interactions; return true if handled. */
+  componentHandlers?: ComponentHandler[];
 }
 
 export const APP_NAME = 'CleanQueue';
-export const APP_VERSION = '2.0.0-phase1';
+export const APP_VERSION = '2.0.0';
+export const BRAND_COLOR = 0x7c5cfc;
+
+/** Per-guild channel and role IDs stored by /setup. */
+export interface GuildChannels {
+  verify?: string;
+  rules?: string;
+  welcome?: string;
+  general?: string;
+  tickets?: string;
+  ticketCategory?: string;
+  suggestions?: string;
+  roles?: string;
+  logs?: string;
+  modLogs?: string;
+  createVoice?: string;
+  voiceCategory?: string;
+}
+
+export interface GuildRoles {
+  verified18?: string;
+  member?: string;
+  moderator?: string;
+  muted?: string;
+  gamer?: string;
+  artist?: string;
+  developer?: string;
+  streamer?: string;
+}
+
+export interface GuildModuleSettings {
+  channels: GuildChannels;
+  roles: GuildRoles;
+  verification?: { minAccountAgeDays: number };
+}

@@ -10,6 +10,7 @@ import { voiceModule } from './modules/voice';
 import { communityModule } from './modules/community';
 import { ticketsModule } from './modules/tickets';
 import { loggingModule } from './modules/logging';
+import { gamesModule } from './modules/games';
 
 async function main(): Promise<void> {
   const registry = new ModuleRegistry();
@@ -21,10 +22,11 @@ async function main(): Promise<void> {
   registry.register(communityModule);
   registry.register(ticketsModule);
   registry.register(loggingModule);
+  registry.register(gamesModule);
 
   const client = new CleanQueueClient(registry);
   registry.bootstrap(client);
-  client.registerEvent(createInteractionCreateEvent());
+  client.registerEvent(createInteractionCreateEvent(registry));
 
   client.on('error', (err) => logger.error({ err }, 'Discord client error'));
 

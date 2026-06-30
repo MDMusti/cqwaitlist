@@ -1,4 +1,4 @@
-import type { BotModule } from '@cleanqueue/shared';
+import type { BotModule, ComponentHandler } from '@cleanqueue/shared';
 import { CommandLoader } from './CommandLoader';
 import type { CleanQueueClient } from './Client';
 import { EventLoader } from './EventLoader';
@@ -8,6 +8,7 @@ export class ModuleRegistry {
   private readonly modules = new Map<string, BotModule>();
   private readonly commandLoader = new CommandLoader();
   private readonly eventLoader = new EventLoader();
+  private componentHandlers: ComponentHandler[] = [];
 
   register(module: BotModule): void {
     if (this.modules.has(module.id)) {
@@ -20,6 +21,7 @@ export class ModuleRegistry {
   bootstrap(client: CleanQueueClient): void {
     const allCommands = [];
     const allEvents = [];
+    this.componentHandlers = [];
 
     for (const module of this.modules.values()) {
       if (!module.enabled) {
@@ -28,10 +30,15 @@ export class ModuleRegistry {
       }
       if (module.commands?.length) allCommands.push(...module.commands);
       if (module.events?.length) allEvents.push(...module.events);
+      if (module.componentHandlers?.length) this.componentHandlers.push(...module.componentHandlers);
     }
 
     this.commandLoader.load(client, allCommands);
     this.eventLoader.load(client, allEvents);
+  }
+
+  getComponentHandlers(): ComponentHandler[] {
+    return this.componentHandlers;
   }
 
   list(): BotModule[] {
