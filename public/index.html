@@ -748,17 +748,25 @@ function shimmerFeat(e, el) {
 }
 
 // ── SLOT COUNTER — lädt echte Zahlen vom Backend ──
+const STATS_POLL_MS = 30000;
 let takenNow = 0;
+let statsPollTimer = null;
 
 async function loadStats() {
   try {
-    const res = await fetch(apiUrl('/api/stats'));
+    const res = await fetch(apiUrl('/api/stats'), { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     takenNow = data.taken;
   } catch (e) {
-    takenNow = 0; // Fallback wenn Backend noch nicht läuft
+    console.warn('[Stats] Backend nicht erreichbar:', e.message);
   }
   updateSlots();
+}
+
+function startStatsPolling() {
+  if (statsPollTimer) return;
+  statsPollTimer = setInterval(loadStats, STATS_POLL_MS);
 }
 
 function updateSlots(extra = 0) {
@@ -801,9 +809,11 @@ function showSuccessView(pos) {
 
 // ── ON PAGE LOAD — check URL params from backend redirect ──
 window.addEventListener('DOMContentLoaded', async () => {
-  await loadStats();
-
   const params = new URLSearchParams(window.location.search);
+  const isOAuthReturn = params.has('success') || params.has('already') || params.has('error');
+
+  await loadStats();
+  startStatsPolling();
 
   if (params.get('success') === 'true') {
     const pos = params.get('pos') || '1';
@@ -811,6 +821,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     history.replaceState({}, '', '/');
     showSuccessView(pos);
     showToast(`✅ Willkommen, ${username}! Du bist #${pos} auf der Liste.`);
+    await loadStats();
     return;
   }
 
@@ -819,6 +830,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     history.replaceState({}, '', '/');
     showSuccessView(pos);
     showToast('ℹ️ Du bist bereits auf der Warteliste!');
+    if (isOAuthReturn) await loadStats();
     return;
   }
 

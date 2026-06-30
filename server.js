@@ -180,6 +180,7 @@ async function addToGuild(userId, accessToken) {
 // ── GET WAITLIST STATS (for the website counter) ──
 app.get('/api/stats', (req, res) => {
   const list = loadWaitlist();
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.json({
     total: 3000,
     taken: list.length,
